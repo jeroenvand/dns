@@ -773,28 +773,8 @@ func (dns *Msg) packBufferWithCompressionMap(buf []byte, compression map[string]
 	return msg[:off], nil
 }
 
-// Unpack unpacks a binary message to a Msg structure.
-func (dns *Msg) Unpack(msg []byte) (err error) {
-	var (
-		dh  Header
-		off int
-	)
-	if dh, off, err = unpackMsgHdr(msg, off); err != nil {
-		return err
-	}
-
-	dns.Id = dh.Id
-	dns.Response = dh.Bits&_QR != 0
-	dns.Opcode = int(dh.Bits>>11) & 0xF
-	dns.Authoritative = dh.Bits&_AA != 0
-	dns.Truncated = dh.Bits&_TC != 0
-	dns.RecursionDesired = dh.Bits&_RD != 0
-	dns.RecursionAvailable = dh.Bits&_RA != 0
-	dns.Zero = dh.Bits&_Z != 0
-	dns.AuthenticatedData = dh.Bits&_AD != 0
-	dns.CheckingDisabled = dh.Bits&_CD != 0
-	dns.Rcode = int(dh.Bits & 0xF)
-
+func (dns *Msg) unpack(dh Header, msg []byte, off int) (err error) {
+	dns.setHdr(dh)
 	// If we are at the end of the message we should return *just* the
 	// header. This can still be useful to the caller. 9.9.9.9 sends these
 	// when responding with REFUSED for instance.
@@ -853,6 +833,17 @@ func (dns *Msg) Unpack(msg []byte) (err error) {
 		err = ErrTruncated
 	}
 	return err
+
+}
+
+// Unpack unpacks a binary message to a Msg structure.
+func (dns *Msg) Unpack(msg []byte) (err error) {
+	dh, off, err := unpackMsgHdr(msg, 0)
+	if err != nil {
+		return err
+	}
+
+	return dns.unpack(dh, msg, off)
 }
 
 // Convert a complete message to a string with dig-like output.
@@ -1184,4 +1175,19 @@ func unpackMsgHdr(msg []byte, off int) (Header, int, error) {
 	}
 	dh.Arcount, off, err = unpackUint16(msg, off)
 	return dh, off, err
+}
+
+// setHdr set the header in the dns using the binary data in dh.
+func (dns *Msg) setHdr(dh Header) {
+	dns.Id = dh.Id
+	dns.Response = dh.Bits&_QR != 0
+	dns.Opcode = int(dh.Bits>>11) & 0xF
+	dns.Authoritative = dh.Bits&_AA != 0
+	dns.Truncated = dh.Bits&_TC != 0
+	dns.RecursionDesired = dh.Bits&_RD != 0
+	dns.RecursionAvailable = dh.Bits&_RA != 0
+	dns.Zero = dh.Bits&_Z != 0 // _Z covers the zero bit, which should be zero; not sure why we set it to the opposite.
+	dns.AuthenticatedData = dh.Bits&_AD != 0
+	dns.CheckingDisabled = dh.Bits&_CD != 0
+	dns.Rcode = int(dh.Bits & 0xF)
 }
